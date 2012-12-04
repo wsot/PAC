@@ -1,0 +1,435 @@
+diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/IPrivacySettingsManager.aidl nexus/frameworks/base/privacy/java/android/privacy/IPrivacySettingsManager.aidl
+--- 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/IPrivacySettingsManager.aidl	2012-12-05 00:44:01.000000000 +1100
++++ nexus/frameworks/base/privacy/java/android/privacy/IPrivacySettingsManager.aidl	2012-12-05 00:44:27.000000000 +1100
+@@ -15,4 +15,7 @@ interface IPrivacySettingsManager
+     boolean setEnabled(boolean enable);
+     boolean setNotificationsEnabled(boolean enable);
+     void setBootCompleted();
++    boolean getIsAuthorizedManagerApp(String packageName);
++    void authorizeManagerApp(String packageName);
++    void deauthorizeManagerApp(String packageName);
+ }
+diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java nexus/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java
+--- 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java	2012-12-05 00:38:26.000000000 +1100
++++ nexus/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java	2012-12-05 00:44:27.000000000 +1100
+@@ -16,7 +16,9 @@ import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.io.OutputStreamWriter;
+ import java.util.ArrayList;
++import java.util.LinkedList;
+ import java.util.List;
++import java.util.Set;
+ 
+ /**
+  * Responsible for persisting privacy settings to built-in memory
+@@ -31,7 +33,7 @@ public class PrivacyPersistenceAdapter {
+ 
+     private static final String DATABASE_FILE = "/data/system/privacy.db";
+     
+-    private static final int DATABASE_VERSION = 4;
++    private static final int DATABASE_VERSION = 5;
+     
+     public static final int DUMMY_UID = -1;
+     
+@@ -47,6 +49,8 @@ public class PrivacyPersistenceAdapter {
+ 
+     private static final String TABLE_SETTINGS = "settings";
+     
++    private static final String TABLE_MANAGER_APPS = "manager_apps";
++    
+     private static final String TABLE_MAP = "map";
+     
+     private static final String TABLE_ALLOWED_CONTACTS = "allowed_contacts";
+@@ -104,6 +108,8 @@ public class PrivacyPersistenceAdapter {
+         " switchWifiStateSetting INTEGER" +
+         ");";
+     
++    private static final String CREATE_TABLE_MANAGER_APPS =
++    	"CREATE TABLE IF NOT EXISTS " + TABLE_MANAGER_APPS + " ( packageName TEXT, signature TEXT, PRIMARY KEY (packageName, signature) )";
+     
+     private static final String CREATE_TABLE_MAP = 
+         "CREATE TABLE IF NOT EXISTS " + TABLE_MAP + " ( name TEXT PRIMARY KEY, value TEXT );";
+@@ -231,6 +237,26 @@ public class PrivacyPersistenceAdapter {
+                 // most current version, do nothing
+                 Log.w(TAG, "upgradeDatabase - trying to upgrade most current DB version");
+                 break;
++                
++            case 5:
++                // need to add the management_apps table
++            	try {
++	                if (db != null && db.isOpen()) {
++	                    db.execSQL(CREATE_TABLE_MANAGER_APPS); 
++	                    db.setTransactionSuccessful();
++	                }
++                } catch (Exception e) {
++                    if (db != null && db.isOpen()) {
++                        db.endTransaction();
++                        db.close();
++                    }
++                    Log.w(TAG, "upgradeDatabase - could not upgrade DB; will restore backup", e);
++                    FileUtils.copyFile(dbBackupFile, dbFile);
++                    dbBackupFile.delete();
++                }
++                
++                break;
++
+         }
+         
+         if (db != null && db.isOpen()) {
+@@ -606,6 +632,178 @@ public class PrivacyPersistenceAdapter {
+         return result;
+     }
+     
++    
++    public synchronized boolean getIsAuthorizedManagerApp(String packageName, Set<String> signatures, boolean forceCloseDB) {
++    	Boolean isAuthorizedManagerApp = false;
++        if (packageName == null) {
++            Log.e(TAG, "getIsAuthorizedManagerApp - insufficient application identifier - package name is required");
++            return isAuthorizedManagerApp;
++        }
++        
++        // indicate that the DB is being read to prevent closing by other threads
++        readingThreads++;
++
++        SQLiteDatabase db;
++        try {
++            db = getReadableDatabase();
++        } catch (SQLiteException e) {
++            Log.e(TAG, "getIsAuthorizedManagerApp - database could not be opened", e);
++            readingThreads--;
++            return isAuthorizedManagerApp;
++        }
++
++        Cursor c = null;
++        
++        //While it would be better from an isolation perspective to have the comparisons outside the database part,
++        //by doing the comparisons here we can short circuit the checks as soon as we get a match
++        try {
++            c = query(db, TABLE_MANAGER_APPS, new String [] {"signature"}, "packageName=?", new String[] { packageName }, null, null, "signature", null);
++
++            if (c != null) {
++            	if (c.getCount() == 0) {
++            		//if there are no entries for the app, then it doesn't have permission to update settings
++            		return false;
++            	} else if (c.moveToFirst()) {
++            		//we know the app is listed, so now we convert the signatures to something useful
++            		int signatureColumn = c.getColumnIndex("signature"); //could probably use a constant for this, to (minimally) increase performance
++            		do {
++            			//as soon as we get a match, we can exit (one signature match is enough)
++            			if (signatures.contains(c.getString(signatureColumn))) {
++            				isAuthorizedManagerApp = true;
++            				break;
++            			}
++            		} while (c.moveToNext());
++            	}
++            }
++        } catch (Exception e) {
++            Log.e(TAG, "getIsAuthorizedManagerApp - Error occurred while reading database for signatures from : " + packageName, e);
++            e.printStackTrace();
++            if (c != null) c.close();
++        } finally {
++            if (c != null) c.close();
++            synchronized (readingThreads) {
++                readingThreads--;
++                // only close DB if no other threads are reading
++                if (readingThreads == 0 && db != null && db.isOpen()) {
++                    db.close();
++                }
++            }
++        }
++        return isAuthorizedManagerApp;
++    }
++
++    public synchronized void authorizeManagerApp(String packageName, Set<String> signatures, boolean forceCloseDB) {
++    	if (packageName == null) {
++    		Log.e(TAG, "authorizeManagerApp - insufficient application identifier - package name is required");
++    		return;
++    	}
++
++    	// indicate that the DB is being read to prevent closing by other threads
++    	readingThreads++;
++
++    	SQLiteDatabase db;
++    	try {
++    		db = getWritableDatabase();
++    	} catch (SQLiteException e) {
++    		Log.e(TAG, "authorizeManagerApp - database could not be opened", e);
++    		readingThreads--;
++    		return;
++    	}
++
++    	Cursor c = null;
++    	db.beginTransaction(); // make sure this ends up in a consistent state (DB and plain text files)
++
++    	try {
++    		c = query(db, TABLE_MANAGER_APPS, new String [] {"signature"}, "packageName=?", new String[] { packageName }, null, null, "signature", null);
++
++    		if (c != null && c.getCount() != 0 && c.moveToFirst()) {
++    			int signatureColumn = c.getColumnIndex("signature"); //could probably use a constant for this, to (minimally) increase performance
++    			//there are one or more entries for this already - we need to remove ones with non-matching signatures before adding any new entries
++    			List<String> sigsToDelete = new LinkedList<String>();
++    			do {
++    				if (signatures.contains(c.getString(signatureColumn))) {
++    					signatures.remove(c.getString(signatureColumn));
++    				} else {
++    					sigsToDelete.add(c.getString(signatureColumn));
++    				}
++    			} while (c.moveToNext());
++
++    			//delete non-matching signature entries
++    			if (sigsToDelete.size() > 0) {
++	    			String [] whereArgs = new String [2];
++	    			whereArgs[0] = packageName;
++	    			for (String sigToDelete : sigsToDelete) {
++	    				whereArgs[1] = sigToDelete;
++	    				db.delete(TABLE_MANAGER_APPS, "packageName=? AND signature=?", whereArgs);
++	    			}
++    			}
++    		}
++    		
++    		ContentValues values = new ContentValues();
++    		values.put("packageName", packageName);
++    		for (String signature : signatures) {
++    			values.put("signature", signature);
++    			db.insert(TABLE_MANAGER_APPS, null, values);
++    		}
++    		
++    		db.setTransactionSuccessful();
++    		
++    	} catch (Exception e) {
++    		Log.e(TAG, "authorizeManagerApp - Error occurred while reading database for signatures from : " + packageName, e);
++    		e.printStackTrace();
++    		if (c != null) c.close();
++    	} finally {
++    		if (c != null) c.close();
++    		db.endTransaction();
++    		synchronized (readingThreads) {
++    			readingThreads--;
++    			// only close DB if no other threads are reading
++    			if (readingThreads == 0 && db != null && db.isOpen()) {
++    				db.close();
++    			}
++    		}
++    	}
++    }
++    
++    public synchronized void deauthorizeManagerApp(String packageName, boolean forceCloseDB) {
++    	if (packageName == null) {
++    		Log.e(TAG, "deauthorizeManagerApp - insufficient application identifier - package name is required");
++    		return;
++    	}
++
++    	// indicate that the DB is being read to prevent closing by other threads
++    	readingThreads++;
++
++    	SQLiteDatabase db;
++    	try {
++    		db = getWritableDatabase();
++    	} catch (SQLiteException e) {
++    		Log.e(TAG, "deauthorizeManagerApp - database could not be opened", e);
++    		readingThreads--;
++    		return;
++    	}
++
++    	db.beginTransaction(); // make sure this ends up in a consistent state (DB and plain text files)
++
++    	try {
++    		db.delete(TABLE_MANAGER_APPS, "packageName=?", new String [] {packageName});    		
++    		db.setTransactionSuccessful();
++    	} catch (Exception e) {
++    		Log.e(TAG, "deauthorizeManagerApp - Error occurred while deleting rights for : " + packageName, e);
++    		e.printStackTrace();
++    	} finally {
++    		db.endTransaction();
++    		synchronized (readingThreads) {
++    			readingThreads--;
++    			// only close DB if no other threads are reading
++    			if (readingThreads == 0 && db != null && db.isOpen()) {
++    				db.close();
++    			}
++    		}
++    	}
++    	return;
++    }
++    
+     /**
+      * This method creates external settings files for access from core librarys
+      * @param settingsName field name from database
+diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java
+--- 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java	2012-12-05 00:44:18.000000000 +1100
++++ nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java	2012-12-05 00:44:27.000000000 +1100
+@@ -52,7 +52,7 @@ public class PrivacySettingsManager {
+     public boolean saveSettings(PrivacySettings settings) {
+         try {
+ //            Log.d(TAG, "saveSettings - " + settings);
+-            if (service != null) {            
++            if (service != null) {
+                 return service.saveSettings(settings);
+             } else {
+                 Log.e(TAG, "saveSettings - PrivacySettingsManagerService is null");
+@@ -197,4 +197,42 @@ public class PrivacySettingsManager {
+             Log.e(TAG, "RemoteException in setBootCompleted: ", e);
+         }
+     }
++    
++    public boolean getIsAuthorizedManagerApp(String packageName) {
++    	try {
++    		if (service != null) {
++    			return service.getIsAuthorizedManagerApp(packageName);
++    		} else {
++    			Log.e(TAG, "getIsAuthorizedManagerApp - PrivacySettingsManagerService is null");
++    			return false;
++    		}
++    	} catch (RemoteException e) {
++    		e.printStackTrace();
++    		return false;
++    	}
++    }
++    
++    public void authorizeManagerApp(String packageName) {
++    	try {
++    		if (service != null) {
++    			service.authorizeManagerApp(packageName);
++    		} else {
++    			Log.e(TAG, "authorizeManagerApp - PrivacySettingsManagerService is null");
++    		}
++    	} catch (RemoteException e) {
++    		e.printStackTrace();
++    	}
++    }
++    
++    public void deauthorizeManagerApp(String packageName) {
++    	try {
++    		if (service != null) {
++    			service.deauthorizeManagerApp(packageName);
++    		} else {
++    			Log.e(TAG, "deauthorizeManagerApp - PrivacySettingsManagerService is null");
++    		}
++    	} catch (RemoteException e) {
++    		e.printStackTrace();
++    	}
++    }
+ }
+diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySettingsManagerService.java nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManagerService.java
+--- 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySettingsManagerService.java	2012-12-05 00:38:26.000000000 +1100
++++ nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManagerService.java	2012-12-05 00:44:27.000000000 +1100
+@@ -2,10 +2,16 @@ package android.privacy;
+ 
+ import android.content.Context;
+ import android.content.Intent;
++import android.content.pm.PackageInfo;
++import android.content.pm.PackageManager;
++import android.content.pm.Signature;
++import android.content.pm.PackageManager.NameNotFoundException;
+ import android.os.Binder;
+ import android.util.Log;
+ 
+ import java.io.File;
++import java.util.HashSet;
++import java.util.Set;
+ 
+ /**
+  * PrivacySettingsManager's counterpart running in the system process, which
+@@ -21,6 +27,8 @@ public class PrivacySettingsManagerServi
+     private static final String WRITE_PRIVACY_SETTINGS = "android.privacy.WRITE_PRIVACY_SETTINGS";
+ 
+     private static final String READ_PRIVACY_SETTINGS = "android.privacy.READ_PRIVACY_SETTINGS";
++    
++    private static final String MANAGE_PRIVACY_APPLICATIONS = "android.privacy.MANAGE_PRIVACY_APPLICATIONS";
+ 
+     private PrivacyPersistenceAdapter persistenceAdapter;
+ 
+@@ -67,6 +75,9 @@ public class PrivacySettingsManagerServi
+ 	//if(!context.getPackageName().equals("com.privacy.pdroid.Addon")){ //enforce permission, because declaring in manifest doesn't work well -> let my addon package save settings
+         	if (Binder.getCallingUid() != 1000)
+             		context.enforceCallingPermission(WRITE_PRIVACY_SETTINGS, "Requires WRITE_PRIVACY_SETTINGS");
++        			if (!getIsAuthorizedManagerApp(context.getPackageName())) {
++        				throw new SecurityException("Application must be authorised to save changes");
++        			}
+ 	//}
+         Log.d(TAG, "saveSettings - " + settings);
+         boolean result = persistenceAdapter.saveSettings(settings);
+@@ -81,6 +92,9 @@ public class PrivacySettingsManagerServi
+ 	//if(!context.getPackageName().equals("com.privacy.pdroid.Addon")){//enforce permission, because declaring in manifest doesn't work well -> let my addon package delete settings
+         	if (Binder.getCallingUid() != 1000)
+             		context.enforceCallingPermission(WRITE_PRIVACY_SETTINGS, "Requires WRITE_PRIVACY_SETTINGS");
++					if (!getIsAuthorizedManagerApp(context.getPackageName())) {
++						throw new SecurityException("Application must be authorised to save changes");
++					}
+ 	//}
+         boolean result = persistenceAdapter.deleteSettings(packageName);
+         // update observer if directory exists
+@@ -93,6 +107,73 @@ public class PrivacySettingsManagerServi
+         return result;
+     }
+     
++    public boolean getIsAuthorizedManagerApp(String packageName) {
++    	PackageManager pkgMgr = context.getPackageManager();
++    	if (pkgMgr == null) {
++    		Log.d(TAG, "getCanUpdateSettings - Package manager could not be obtained");
++    		return false; 
++    	}
++    	
++    	PackageInfo pkgInfo;
++    	try {
++	    	//get the package info so we can get the signatures
++	    	 pkgInfo = pkgMgr.getPackageInfo(packageName, PackageManager.GET_SIGNATURES);
++    	} catch (NameNotFoundException e) {
++    		Log.d(TAG, "getCanUpdateSettings - Could not get package with name " + packageName);
++    		return false;
++    	}
++    	if (pkgInfo == null) {
++    		Log.d(TAG, "getCanUpdateSettings - Got null back when retrieving packageInfo for " + packageName);
++    		return false;
++    	}
++    	
++		Set<String> asciiSigs = new HashSet<String>();
++		for (Signature signature : pkgInfo.signatures) {
++			asciiSigs.add(signature.toCharsString());
++		}
++    	
++        return persistenceAdapter.getIsAuthorizedManagerApp(packageName, asciiSigs, false);
++  }
++
++    
++    public void authorizeManagerApp(String packageName) {
++    	if (Binder.getCallingUid() != 1000)
++    		context.enforceCallingPermission(MANAGE_PRIVACY_APPLICATIONS, "Requires MANAGE_PRIVACY_APPLICATIONS");
++
++    	PackageManager pkgMgr = context.getPackageManager();
++    	if (pkgMgr == null) {
++    		Log.d(TAG, "authorizeManagerApp - Package manager could not be obtained");
++    		return; 
++    	}
++    	
++    	PackageInfo pkgInfo;
++    	try {
++	    	//get the package info so we can get the signatures
++	    	 pkgInfo = pkgMgr.getPackageInfo(packageName, PackageManager.GET_SIGNATURES);
++    	} catch (NameNotFoundException e) {
++    		Log.d(TAG, "authorizeManagerApp - Could not get package with name " + packageName);
++    		return;
++    	}
++    	if (pkgInfo == null) {
++    		Log.d(TAG, "authorizeManagerApp - Got null back when retrieving packageInfo for " + packageName);
++    		return;
++    	}
++    	
++		Set<String> asciiSigs = new HashSet<String>();
++		for (Signature signature : pkgInfo.signatures) {
++			asciiSigs.add(signature.toCharsString());
++		}
++    	
++        persistenceAdapter.authorizeManagerApp(packageName, asciiSigs, false);
++  }
++    
++    public void deauthorizeManagerApp(String packageName) {
++    	if (Binder.getCallingUid() != 1000)
++    		context.enforceCallingPermission(MANAGE_PRIVACY_APPLICATIONS, "Requires MANAGE_PRIVACY_APPLICATIONS");
++
++        persistenceAdapter.deauthorizeManagerApp(packageName, false);
++  }
++    
+     public double getVersion() {
+         return VERSION;
+     }

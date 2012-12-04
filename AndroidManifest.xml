@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="net.digitalfeed.pac"
+    android:versionCode="1"
+    android:versionName="1.0" >
+
+    <uses-sdk
+        android:minSdkVersion="14"
+        android:targetSdkVersion="16" />
+	<permission android:label="@string/permission_label_manageprivacyapplications" android:name="android.privacy.MANAGE_PRIVACY_APPLICATIONS" android:protectionLevel="signature" android:permissionGroup="android.permission-group.PERSONAL_INFO" android:description="@string/permission_description_manageprivacyapplications" />
+	<permission android:label="@string/permission_label_writeprivacysettings" android:name="android.privacy.WRITE_PRIVACY_SETTINGS" android:protectionLevel="normal" android:permissionGroup="android.permission-group.PERSONAL_INFO" android:description="@string/permission_description_writeprivacysettings" />
+	<uses-permission android:name="android.privacy.MANAGE_PRIVACY_APPLICATIONS" />
+	<uses-permission android:name="android.privacy.WRITE_PRIVACY_SETTINGS" />
+    <application
+        android:allowBackup="true"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/AppTheme" >
+        <activity
+            android:name="net.digitalfeed.pac.ChooseApplication"
+            android:label="@string/app_name" >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

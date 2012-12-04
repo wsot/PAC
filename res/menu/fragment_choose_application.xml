@@ -1,0 +1,14 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/choose_application_save_changes"
+        android:icon="@android:drawable/ic_menu_save"
+		android:showAsAction="always"
+        android:title="@string/choose_application_save_changes" />
+	<item android:id="@+id/choose_application_refresh"
+        android:icon="@drawable/ic_menu_refresh"
+		android:showAsAction="always"
+        android:title="@string/choose_application_refresh" />
+	<item android:id="@+id/choose_application_help"
+        android:icon="@android:drawable/ic_menu_help"
+		android:showAsAction="always"
+        android:title="@string/choose_application_help" />
+</menu>

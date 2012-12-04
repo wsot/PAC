@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">PAC</string>
+
+    <string name="permission_label_writeprivacysettings">Modify PDroid settings</string>
+    <string name="permission_description_writeprivacysettings">Allows modification of PDroid settings associated with applications.</string>
+    <string name="permission_label_manageprivacyapplications">Configure PDroid Management Applications</string>
+    <string name="permission_description_manageprivacyapplications">Allows configuration of which apps are able to change PDroid settings</string>    
+    
+    <string name="alert_dialog_ok">OK</string>
+    
+    <string name="choose_application_save_changes">Save</string>
+    <string name="choose_application_refresh">Reload application list</string>
+    <string name="choose_application_help">Help</string>
+    
+    <string name="choose_application_icon">Application icon</string>
+    
+    <string name="choose_application_loading_list_title">Loading&#8230;</string>
+    <string name="choose_application_loading_list_message">Please wait while the application list is generated</string>
+    
+    <string name="choose_application_saving_title">Saving&#8230;</string>
+    <string name="choose_application_saving_message">Please wait while your settings are saved</string>
+    <string name="choose_application_save_complete">Settings saved</string>
+    
+    
+    
+	<string name="help_dialog_title">Help for PAC</string>
+    <string name="help_dialog_message"><![CDATA[
+<p><i>PAC</i>, or <i>PDroid Application Chooser</i> allows users to nominate which applications are able to update PDroid settings.</p>
+<p>Simply check those apps which you want to be able to modify PDroid settings, hit the save icon, and only those apps will be able to do so.</p>
+<h3>Copyright statement</h3>
+<p>Copyright (C) 2012 Simeon J. Morgan (smorgan@digitalfeed.net)
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 3 of the License, or (at your option) any later version.
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+You should have received a copy of the GNU General Public License along with
+this program; if not, see <http://www.gnu.org/licenses>.
+The software has the following requirements (GNU GPL version 3 section 7):
+Modified or derivative versions of the PAC application must use an
+alternative name, rather than the names PAC or PDroid Application Chooser.</p>
+]]></string>
+</resources>
