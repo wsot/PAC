@@ -208,7 +208,8 @@ public class ChooseApplicationFragment extends ListFragment {
 	class SaveTaskCompleteHandler implements IAsyncTaskCallback<Void> {
 		@Override
 		public void asyncTaskComplete(Void param) {
-			Toast.makeText(getActivity(), getString(R.string.choose_application_save_complete), Toast.LENGTH_SHORT);
+			hideDialog();
+			Toast.makeText(getActivity(), getString(R.string.choose_application_save_complete), Toast.LENGTH_SHORT).show();
 		}
 	}
 	

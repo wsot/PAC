@@ -26,14 +26,8 @@
  */
 package net.digitalfeed.pac;
 
-import java.util.LinkedList;
-import java.util.List;
 
 import android.content.Context;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
-import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.AsyncTask;
 import android.privacy.PrivacySettingsManager;
 import android.util.Log;
@@ -49,13 +43,13 @@ import android.util.Log;
  * @author smorgan
  *
  */
-class PDroidAppListLoader extends AsyncTask<Void, Integer, List<PDroidApplication>> {
+class PDroidAppListSaver extends AsyncTask<PDroidApplication, Void, Void> {
 
-	IAsyncTaskCallbackWithProgress<List<PDroidApplication>> listener;
+	IAsyncTaskCallback<Void> listener;
 	
 	Context context;
 	
-	public PDroidAppListLoader(Context context, IAsyncTaskCallbackWithProgress<List<PDroidApplication>> listener) {
+	public PDroidAppListSaver(Context context, IAsyncTaskCallback<Void> listener) {
 		this.context = context;
 		this.listener = listener;
 	}
@@ -69,59 +63,29 @@ class PDroidAppListLoader extends AsyncTask<Void, Integer, List<PDroidApplicatio
 	 * Retrieves the list of applications, and returns as an array of Application objects
 	 */
 	@Override
-	protected List<PDroidApplication> doInBackground(Void... params) {
-		String thisPackageName = context.getPackageName();
+	protected Void doInBackground(PDroidApplication... params) {
+		if (params == null || params.length < 1) {
+			return null;
+		}
 		
 		PrivacySettingsManager privacySettingsManager = (PrivacySettingsManager)context.getSystemService("privacy");
-		
-		List<PDroidApplication> appList = new LinkedList<PDroidApplication>();
-		PackageManager pkgMgr = context.getPackageManager();
-		
-		List<ApplicationInfo> installedApps = pkgMgr.getInstalledApplications(PackageManager.GET_META_DATA);
-
-		Integer[] progressObject = new Integer[2];
-		progressObject[0] = 0;
-		progressObject[1] = installedApps.size();
-		
-		publishProgress(progressObject.clone());
-		
-		for (ApplicationInfo appInfo : installedApps) {
-			try {
-				PackageInfo pkgInfo = pkgMgr.getPackageInfo(appInfo.packageName, PackageManager.GET_PERMISSIONS | PackageManager.GET_SIGNATURES);
-				
-				if (pkgMgr.checkPermission(PDroidApplication.PERMISSION_FOR_INCLUSION, appInfo.packageName) == PackageManager.PERMISSION_GRANTED) {
-
-					//exclude PAC from the listing
-					if (!pkgInfo.packageName.equals(thisPackageName)) {
-						Log.d("PAC", "App has permission " + appInfo.packageName);
-						boolean canUpdateSettings = privacySettingsManager.getIsAuthorizedManagerApp(appInfo.packageName);
-						//boolean canUpdateSettings = false;
-						appList.add(
-								new PDroidApplication(
-									appInfo.packageName,
-									pkgMgr.getApplicationLabel(appInfo).toString(),
-									pkgMgr.getApplicationIcon(appInfo.packageName),
-									canUpdateSettings)
-								);
-					}
+		for (PDroidApplication app : params) {
+			if (app != null) {
+				if (app.getCanManagePDroid()) {
+					Log.d("PAC","Authorising app " + app.getPackageName());
+					privacySettingsManager.authorizeManagerApp(app.getPackageName());
+				} else {
+					Log.d("PAC","Deauthorising app " + app.getPackageName());
+					privacySettingsManager.deauthorizeManagerApp(app.getPackageName());
 				}
-
-			} catch (NameNotFoundException e) {	
-				Log.d("PAC", String.format("Application %s went missing from installed applications list", appInfo.packageName));
+				
 			}
-			progressObject[0] += 1;
-			publishProgress(progressObject.clone());
 		}
-		return appList;
+		return null;
 	}
-	
+		
 	@Override
-	protected void onProgressUpdate(Integer... progress) {
-		listener.asyncTaskProgressUpdate(progress);
-	}
-	
-	@Override
-	protected void onPostExecute(List<PDroidApplication> result) {
+	protected void onPostExecute(Void result) {
 		super.onPostExecute(result);
 		listener.asyncTaskComplete(result);
 	}
