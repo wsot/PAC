@@ -1,6 +1,6 @@
 diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/IPrivacySettingsManager.aidl nexus/frameworks/base/privacy/java/android/privacy/IPrivacySettingsManager.aidl
 --- 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/IPrivacySettingsManager.aidl	2012-12-05 00:44:01.000000000 +1100
-+++ nexus/frameworks/base/privacy/java/android/privacy/IPrivacySettingsManager.aidl	2012-12-06 09:45:26.000000000 +1100
++++ nexus/frameworks/base/privacy/java/android/privacy/IPrivacySettingsManager.aidl	2012-12-06 08:53:38.000000000 +1100
 @@ -15,4 +15,7 @@ interface IPrivacySettingsManager
      boolean setEnabled(boolean enable);
      boolean setNotificationsEnabled(boolean enable);
@@ -11,7 +11,7 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/IPrivacyS
  }
 diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java nexus/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java
 --- 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java	2012-12-05 00:38:26.000000000 +1100
-+++ nexus/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java	2012-12-06 09:45:26.000000000 +1100
++++ nexus/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java	2012-12-06 08:53:38.000000000 +1100
 @@ -16,7 +16,9 @@ import java.io.FileOutputStream;
  import java.io.IOException;
  import java.io.OutputStreamWriter;
@@ -287,7 +287,7 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacyPe
              db.execSQL(INSERT_NOTIFICATIONS_ENABLED);
 diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java
 --- 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java	2012-12-05 00:44:18.000000000 +1100
-+++ nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java	2012-12-06 09:45:27.000000000 +1100
++++ nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java	2012-12-06 08:53:39.000000000 +1100
 @@ -52,7 +52,7 @@ public class PrivacySettingsManager {
      public boolean saveSettings(PrivacySettings settings) {
          try {
@@ -342,9 +342,11 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySe
  }
 diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySettingsManagerService.java nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManagerService.java
 --- 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySettingsManagerService.java	2012-12-05 00:38:26.000000000 +1100
-+++ nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManagerService.java	2012-12-06 09:45:27.000000000 +1100
-@@ -2,10 +2,16 @@ package android.privacy;
++++ nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManagerService.java	2012-12-06 08:53:39.000000000 +1100
+@@ -1,11 +1,19 @@
+ package android.privacy;
  
++import android.app.ActivityManager;
  import android.content.Context;
  import android.content.Intent;
 +import android.content.pm.PackageInfo;
@@ -356,11 +358,12 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySe
  
  import java.io.File;
 +import java.util.HashSet;
++import java.util.List;
 +import java.util.Set;
  
  /**
   * PrivacySettingsManager's counterpart running in the system process, which
-@@ -21,6 +27,8 @@ public class PrivacySettingsManagerServi
+@@ -21,6 +29,8 @@ public class PrivacySettingsManagerServi
      private static final String WRITE_PRIVACY_SETTINGS = "android.privacy.WRITE_PRIVACY_SETTINGS";
  
      private static final String READ_PRIVACY_SETTINGS = "android.privacy.READ_PRIVACY_SETTINGS";
@@ -369,69 +372,46 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySe
  
      private PrivacyPersistenceAdapter persistenceAdapter;
  
-@@ -67,6 +75,9 @@ public class PrivacySettingsManagerServi
+@@ -67,6 +77,9 @@ public class PrivacySettingsManagerServi
  	//if(!context.getPackageName().equals("com.privacy.pdroid.Addon")){ //enforce permission, because declaring in manifest doesn't work well -> let my addon package save settings
          	if (Binder.getCallingUid() != 1000)
              		context.enforceCallingPermission(WRITE_PRIVACY_SETTINGS, "Requires WRITE_PRIVACY_SETTINGS");
-+        			if (!getIsAuthorizedManagerApp(Binder.getCallingUid())) {
++        			if (!getIsAuthorizedManagerApp(Binder.getCallingPid())) {
 +        				throw new SecurityException("Application must be authorised to save changes");
 +        			}
  	//}
          Log.d(TAG, "saveSettings - " + settings);
          boolean result = persistenceAdapter.saveSettings(settings);
-@@ -81,6 +92,9 @@ public class PrivacySettingsManagerServi
+@@ -81,6 +94,9 @@ public class PrivacySettingsManagerServi
  	//if(!context.getPackageName().equals("com.privacy.pdroid.Addon")){//enforce permission, because declaring in manifest doesn't work well -> let my addon package delete settings
          	if (Binder.getCallingUid() != 1000)
              		context.enforceCallingPermission(WRITE_PRIVACY_SETTINGS, "Requires WRITE_PRIVACY_SETTINGS");
-+					if (!getIsAuthorizedManagerApp(Binder.getCallingUid())) {
++					if (!getIsAuthorizedManagerApp(Binder.getCallingPid())) {
 +						throw new SecurityException("Application must be authorised to save changes");
 +					}
  	//}
          boolean result = persistenceAdapter.deleteSettings(packageName);
          // update observer if directory exists
-@@ -93,6 +107,117 @@ public class PrivacySettingsManagerServi
+@@ -93,6 +109,94 @@ public class PrivacySettingsManagerServi
          return result;
      }
      
-+    public boolean getIsAuthorizedManagerApp(int uid) {
-+    	Log.d(TAG, "getIsAuthorizedManagerApp - Getting packages for UID " + Integer.toString(uid));
-+    	PackageManager pkgMgr = context.getPackageManager();
-+    	if (pkgMgr == null) {
-+    		Log.d(TAG, "getIsAuthorizedManagerApp - Package manager could not be obtained");
-+    		return false; 
-+    	}
-+    	
-+    	String [] packageNames;
-+    	PackageInfo pkgInfo;
-+    	try {
-+    		packageNames = pkgMgr.getPackagesForUid(uid);
-+    	} catch (Exception e) {
-+    		return false;
-+    	}
-+    	
-+    	Set<String> asciiSigs = new HashSet<String>();
-+    	
-+    	//get the package info so we can get the signatures
-+		for (String packageName : packageNames) {
-+			try {
-+				pkgInfo = pkgMgr.getPackageInfo(packageName, PackageManager.GET_SIGNATURES);
-+		    	Log.d(TAG, "getIsAuthorizedManagerApp - Retrieving asciiSigs for " + packageName);
-+				for (Signature signature : pkgInfo.signatures) {
-+					Log.d(TAG, "getIsAuthorizedManagerApp - Found signature " + signature.toCharsString());
-+					asciiSigs.add(signature.toCharsString());
-+				}
-+	    	} catch (NameNotFoundException e) {
-+	    		Log.d(TAG, "getIsAuthorizedManagerApp - Could not get package with name " + packageName);
-+	    		return false;
-+	    	}
-+			
-+	    	if (pkgInfo == null) {
-+	    		Log.d(TAG, "getIsAuthorizedManagerApp - Got null back when retrieving packageInfo for " + packageName);
-+	    		return false;
-+	    	}
++    public boolean getIsAuthorizedManagerApp(int pid) {
++    	Log.d(TAG, "getIsAuthorizedManagerApp - Getting packages for PID " + Integer.toString(pid));
++
++        String packageName = null;
++        ActivityManager actMgr = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
++		for(ActivityManager.RunningAppProcessInfo processInfo : actMgr.getRunningAppProcesses()){
++			if(processInfo.pid == pid){
++				packageName = processInfo.processName;
++			}
 +		}
-+    	
-+        return persistenceAdapter.getIsAuthorizedManagerApp(packageNames, asciiSigs, false);
++		if (packageName == null) {
++			Log.d(TAG, "getIsAuthorizedManagerApp - Package name could not be obtained");
++			return false;
++		}
++
++        return getIsAuthorizedManagerApp(packageName);
 +  }
 +    
 +    public boolean getIsAuthorizedManagerApp(String packageName) {
