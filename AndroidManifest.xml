@@ -8,9 +8,9 @@
         android:minSdkVersion="14"
         android:targetSdkVersion="16" />
 	<permission android:label="@string/permission_label_manageprivacyapplications" android:name="android.privacy.MANAGE_PRIVACY_APPLICATIONS" android:protectionLevel="signature" android:permissionGroup="android.permission-group.PERSONAL_INFO" android:description="@string/permission_description_manageprivacyapplications" />
-	<permission android:label="@string/permission_label_writeprivacysettings" android:name="android.privacy.WRITE_PRIVACY_SETTINGS" android:protectionLevel="normal" android:permissionGroup="android.permission-group.PERSONAL_INFO" android:description="@string/permission_description_writeprivacysettings" />
+	<!-- <permission android:label="@string/permission_label_writeprivacysettings" android:name="android.privacy.WRITE_PRIVACY_SETTINGS" android:protectionLevel="normal" android:permissionGroup="android.permission-group.PERSONAL_INFO" android:description="@string/permission_description_writeprivacysettings" />-->
 	<uses-permission android:name="android.privacy.MANAGE_PRIVACY_APPLICATIONS" />
-	<uses-permission android:name="android.privacy.WRITE_PRIVACY_SETTINGS" />
+	<!-- <uses-permission android:name="android.privacy.WRITE_PRIVACY_SETTINGS" />-->
     <application
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"
