@@ -1,6 +1,6 @@
 diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/IPrivacySettingsManager.aidl nexus/frameworks/base/privacy/java/android/privacy/IPrivacySettingsManager.aidl
 --- 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/IPrivacySettingsManager.aidl	2012-12-05 00:44:01.000000000 +1100
-+++ nexus/frameworks/base/privacy/java/android/privacy/IPrivacySettingsManager.aidl	2012-12-05 00:44:27.000000000 +1100
++++ nexus/frameworks/base/privacy/java/android/privacy/IPrivacySettingsManager.aidl	2012-12-06 09:45:26.000000000 +1100
 @@ -15,4 +15,7 @@ interface IPrivacySettingsManager
      boolean setEnabled(boolean enable);
      boolean setNotificationsEnabled(boolean enable);
@@ -11,7 +11,7 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/IPrivacyS
  }
 diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java nexus/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java
 --- 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java	2012-12-05 00:38:26.000000000 +1100
-+++ nexus/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java	2012-12-05 17:02:55.000000000 +1100
++++ nexus/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java	2012-12-06 09:45:26.000000000 +1100
 @@ -16,7 +16,9 @@ import java.io.FileOutputStream;
  import java.io.IOException;
  import java.io.OutputStreamWriter;
@@ -86,14 +86,15 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacyPe
                  // most current version, do nothing
                  Log.w(TAG, "upgradeDatabase - trying to upgrade most current DB version");
                  break;
-@@ -606,6 +633,178 @@ public class PrivacyPersistenceAdapter {
+@@ -606,6 +633,190 @@ public class PrivacyPersistenceAdapter {
          return result;
      }
      
 +    
-+    public synchronized boolean getIsAuthorizedManagerApp(String packageName, Set<String> signatures, boolean forceCloseDB) {
++    public synchronized boolean getIsAuthorizedManagerApp(String [] packageNames, Set<String> signatures, boolean forceCloseDB) {
++    	Log.d(TAG, "getIsAuthorizedManagerApp in PrivacyPersistenceAdapter - Starting with " + Integer.toString(signatures.size()) + " items");
 +    	Boolean isAuthorizedManagerApp = false;
-+        if (packageName == null) {
++        if (packageNames == null || packageNames.length < 1) {
 +            Log.e(TAG, "getIsAuthorizedManagerApp - insufficient application identifier - package name is required");
 +            return isAuthorizedManagerApp;
 +        }
@@ -115,26 +116,37 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacyPe
 +        //While it would be better from an isolation perspective to have the comparisons outside the database part,
 +        //by doing the comparisons here we can short circuit the checks as soon as we get a match
 +        try {
-+            c = query(db, TABLE_MANAGER_APPS, new String [] {"signature"}, "packageName=?", new String[] { packageName }, null, null, "signature", null);
-+
-+            if (c != null) {
-+            	if (c.getCount() == 0) {
-+            		//if there are no entries for the app, then it doesn't have permission to update settings
-+            		return false;
-+            	} else if (c.moveToFirst()) {
-+            		//we know the app is listed, so now we convert the signatures to something useful
-+            		int signatureColumn = c.getColumnIndex("signature"); //could probably use a constant for this, to (minimally) increase performance
-+            		do {
-+            			//as soon as we get a match, we can exit (one signature match is enough)
-+            			if (signatures.contains(c.getString(signatureColumn))) {
-+            				isAuthorizedManagerApp = true;
-+            				break;
-+            			}
-+            		} while (c.moveToNext());
-+            	}
++        	Log.d(TAG, "getIsAuthorizedManagerApp in PrivacyPersistenceAdapter - Running query");
++        	
++        	for (String packageName : packageNames) {
++	            c = query(db, TABLE_MANAGER_APPS, new String [] {"signature"}, "packageName=?", new String[] { packageName }, null, null, "signature", null);
++	
++	            if (c != null) {
++	            	Log.d(TAG, "getIsAuthorizedManagerApp in PrivacyPersistenceAdapter - cursor not null");
++	            	if (c.getCount() == 0) {
++	            		Log.d(TAG, "getIsAuthorizedManagerApp in PrivacyPersistenceAdapter - cursor getCount = 0");
++	            		//if there are no entries for the app, then it doesn't have permission to update settings
++	            		return false;
++	            	} else if (c.moveToFirst()) {
++	            		Log.d(TAG, "getIsAuthorizedManagerApp in PrivacyPersistenceAdapter - Result count " + Integer.toString(c.getCount()));
++	            		//we know the app is listed, so now we convert the signatures to something useful
++	            		int signatureColumn = c.getColumnIndex("signature"); //could probably use a constant for this, to (minimally) increase performance
++	            		do {
++	            			//as soon as we get a match, we can exit (one signature match is enough)
++	                		Log.d(TAG, "getIsAuthorizedManagerApp in PrivacyPersistenceAdapter - Check if signature present " + c.getString(signatureColumn));
++	
++	            			if (signatures.contains(c.getString(signatureColumn))) {
++	            				Log.d(TAG, "getIsAuthorizedManagerApp in PrivacyPersistenceAdapter - Signature matched: app is permitted");
++	            				isAuthorizedManagerApp = true;
++	            				break;
++	            			}
++	            			Log.d(TAG, "getIsAuthorizedManagerApp in PrivacyPersistenceAdapter - Moving to next row");
++	            		} while (c.moveToNext());
++	            	}
++	            }
 +            }
 +        } catch (Exception e) {
-+            Log.e(TAG, "getIsAuthorizedManagerApp - Error occurred while reading database for signatures from : " + packageName, e);
++            Log.e(TAG, "getIsAuthorizedManagerApp - Error occurred while reading database for signatures", e);
 +            e.printStackTrace();
 +            if (c != null) c.close();
 +        } finally {
@@ -265,7 +277,7 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacyPe
      /**
       * This method creates external settings files for access from core librarys
       * @param settingsName field name from database
-@@ -822,6 +1021,7 @@ public class PrivacyPersistenceAdapter {
+@@ -822,6 +1033,7 @@ public class PrivacyPersistenceAdapter {
              db.execSQL(CREATE_TABLE_SETTINGS);
              db.execSQL(CREATE_TABLE_ALLOWED_CONTACTS);
              db.execSQL(CREATE_TABLE_MAP);
@@ -275,7 +287,7 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacyPe
              db.execSQL(INSERT_NOTIFICATIONS_ENABLED);
 diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java
 --- 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java	2012-12-05 00:44:18.000000000 +1100
-+++ nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java	2012-12-05 00:44:27.000000000 +1100
++++ nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java	2012-12-06 09:45:27.000000000 +1100
 @@ -52,7 +52,7 @@ public class PrivacySettingsManager {
      public boolean saveSettings(PrivacySettings settings) {
          try {
@@ -330,7 +342,7 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySe
  }
 diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySettingsManagerService.java nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManagerService.java
 --- 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySettingsManagerService.java	2012-12-05 00:38:26.000000000 +1100
-+++ nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManagerService.java	2012-12-05 00:44:27.000000000 +1100
++++ nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManagerService.java	2012-12-06 09:45:27.000000000 +1100
 @@ -2,10 +2,16 @@ package android.privacy;
  
  import android.content.Context;
@@ -361,7 +373,7 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySe
  	//if(!context.getPackageName().equals("com.privacy.pdroid.Addon")){ //enforce permission, because declaring in manifest doesn't work well -> let my addon package save settings
          	if (Binder.getCallingUid() != 1000)
              		context.enforceCallingPermission(WRITE_PRIVACY_SETTINGS, "Requires WRITE_PRIVACY_SETTINGS");
-+        			if (!getIsAuthorizedManagerApp(context.getPackageName())) {
++        			if (!getIsAuthorizedManagerApp(Binder.getCallingUid())) {
 +        				throw new SecurityException("Application must be authorised to save changes");
 +        			}
  	//}
@@ -371,20 +383,62 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySe
  	//if(!context.getPackageName().equals("com.privacy.pdroid.Addon")){//enforce permission, because declaring in manifest doesn't work well -> let my addon package delete settings
          	if (Binder.getCallingUid() != 1000)
              		context.enforceCallingPermission(WRITE_PRIVACY_SETTINGS, "Requires WRITE_PRIVACY_SETTINGS");
-+					if (!getIsAuthorizedManagerApp(context.getPackageName())) {
++					if (!getIsAuthorizedManagerApp(Binder.getCallingUid())) {
 +						throw new SecurityException("Application must be authorised to save changes");
 +					}
  	//}
          boolean result = persistenceAdapter.deleteSettings(packageName);
          // update observer if directory exists
-@@ -93,6 +107,73 @@ public class PrivacySettingsManagerServi
+@@ -93,6 +107,117 @@ public class PrivacySettingsManagerServi
          return result;
      }
      
-+    public boolean getIsAuthorizedManagerApp(String packageName) {
++    public boolean getIsAuthorizedManagerApp(int uid) {
++    	Log.d(TAG, "getIsAuthorizedManagerApp - Getting packages for UID " + Integer.toString(uid));
 +    	PackageManager pkgMgr = context.getPackageManager();
 +    	if (pkgMgr == null) {
-+    		Log.d(TAG, "getCanUpdateSettings - Package manager could not be obtained");
++    		Log.d(TAG, "getIsAuthorizedManagerApp - Package manager could not be obtained");
++    		return false; 
++    	}
++    	
++    	String [] packageNames;
++    	PackageInfo pkgInfo;
++    	try {
++    		packageNames = pkgMgr.getPackagesForUid(uid);
++    	} catch (Exception e) {
++    		return false;
++    	}
++    	
++    	Set<String> asciiSigs = new HashSet<String>();
++    	
++    	//get the package info so we can get the signatures
++		for (String packageName : packageNames) {
++			try {
++				pkgInfo = pkgMgr.getPackageInfo(packageName, PackageManager.GET_SIGNATURES);
++		    	Log.d(TAG, "getIsAuthorizedManagerApp - Retrieving asciiSigs for " + packageName);
++				for (Signature signature : pkgInfo.signatures) {
++					Log.d(TAG, "getIsAuthorizedManagerApp - Found signature " + signature.toCharsString());
++					asciiSigs.add(signature.toCharsString());
++				}
++	    	} catch (NameNotFoundException e) {
++	    		Log.d(TAG, "getIsAuthorizedManagerApp - Could not get package with name " + packageName);
++	    		return false;
++	    	}
++			
++	    	if (pkgInfo == null) {
++	    		Log.d(TAG, "getIsAuthorizedManagerApp - Got null back when retrieving packageInfo for " + packageName);
++	    		return false;
++	    	}
++		}
++    	
++        return persistenceAdapter.getIsAuthorizedManagerApp(packageNames, asciiSigs, false);
++  }
++    
++    public boolean getIsAuthorizedManagerApp(String packageName) {
++    	Log.d(TAG, "getIsAuthorizedManagerApp - Running for package " + packageName);
++    	PackageManager pkgMgr = context.getPackageManager();
++    	if (pkgMgr == null) {
++    		Log.d(TAG, "getIsAuthorizedManagerApp - Package manager could not be obtained");
 +    		return false; 
 +    	}
 +    	
@@ -393,20 +447,22 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySe
 +	    	//get the package info so we can get the signatures
 +	    	 pkgInfo = pkgMgr.getPackageInfo(packageName, PackageManager.GET_SIGNATURES);
 +    	} catch (NameNotFoundException e) {
-+    		Log.d(TAG, "getCanUpdateSettings - Could not get package with name " + packageName);
++    		Log.d(TAG, "getIsAuthorizedManagerApp - Could not get package with name " + packageName);
 +    		return false;
 +    	}
 +    	if (pkgInfo == null) {
-+    		Log.d(TAG, "getCanUpdateSettings - Got null back when retrieving packageInfo for " + packageName);
++    		Log.d(TAG, "getIsAuthorizedManagerApp - Got null back when retrieving packageInfo for " + packageName);
 +    		return false;
 +    	}
 +    	
++    	Log.d(TAG, "getIsAuthorizedManagerApp - Retrieving asciiSigs for " + packageName);
 +		Set<String> asciiSigs = new HashSet<String>();
 +		for (Signature signature : pkgInfo.signatures) {
++			Log.d(TAG, "getIsAuthorizedManagerApp - Found signature " + signature.toCharsString());
 +			asciiSigs.add(signature.toCharsString());
 +		}
 +    	
-+        return persistenceAdapter.getIsAuthorizedManagerApp(packageName, asciiSigs, false);
++        return persistenceAdapter.getIsAuthorizedManagerApp(new String[] {packageName}, asciiSigs, false);
 +  }
 +
 +    
