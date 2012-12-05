@@ -11,7 +11,7 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/IPrivacyS
  }
 diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java nexus/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java
 --- 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java	2012-12-05 00:38:26.000000000 +1100
-+++ nexus/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java	2012-12-05 00:44:27.000000000 +1100
++++ nexus/frameworks/base/privacy/java/android/privacy/PrivacyPersistenceAdapter.java	2012-12-05 17:02:55.000000000 +1100
 @@ -16,7 +16,9 @@ import java.io.FileOutputStream;
  import java.io.IOException;
  import java.io.OutputStreamWriter;
@@ -265,6 +265,14 @@ diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacyPe
      /**
       * This method creates external settings files for access from core librarys
       * @param settingsName field name from database
+@@ -822,6 +1021,7 @@ public class PrivacyPersistenceAdapter {
+             db.execSQL(CREATE_TABLE_SETTINGS);
+             db.execSQL(CREATE_TABLE_ALLOWED_CONTACTS);
+             db.execSQL(CREATE_TABLE_MAP);
++            db.execSQL(CREATE_TABLE_MANAGER_APPS);
+             db.execSQL(INSERT_VERSION);
+             db.execSQL(INSERT_ENABLED);
+             db.execSQL(INSERT_NOTIFICATIONS_ENABLED);
 diff -rupN 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java
 --- 4.1.2r1_pdroid/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java	2012-12-05 00:44:18.000000000 +1100
 +++ nexus/frameworks/base/privacy/java/android/privacy/PrivacySettingsManager.java	2012-12-05 00:44:27.000000000 +1100
