@@ -73,7 +73,7 @@ class PDroidAppListSaver extends AsyncTask<PDroidApplication, Void, Void> {
 			if (app != null) {
 				if (app.getCanManagePDroid()) {
 					Log.d("PAC","Authorising app " + app.getPackageName());
-					privacySettingsManager.authorizeManagerApp(app.getPackageName());
+					privacySettingsManager.authorizeManagerAppSignatures(app.getPackageName());
 				} else {
 					Log.d("PAC","Deauthorising app " + app.getPackageName());
 					privacySettingsManager.deauthorizeManagerApp(app.getPackageName());
